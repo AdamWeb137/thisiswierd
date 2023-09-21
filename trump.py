@@ -8,6 +8,8 @@ def get_ansi_characters(string):
     nc = []
     on_ansi=False
     for c in string:
+        if c == "\r":
+            continue
         nc.append(c)
         if c == "\033":
             on_ansi = True
@@ -39,9 +41,7 @@ def copy_to_out(out,w,h,x,y,colors=False):
         ix += 1
         out[iy+y][ix+x] = c
 
-def rec_blocks(out,w,h,x=1,y=1):
-    wspace = 2
-    hspace = 1
+def rec_blocks(out,w,h,x,y,wspace,hspace,colors):
     if w <= wspace or h <= hspace:
         return
 
@@ -52,10 +52,10 @@ def rec_blocks(out,w,h,x=1,y=1):
 
     #print(iw,ih)
 
-    copy_to_out(out,iw,ih,x,y) 
+    copy_to_out(out,iw,ih,x,y,colors) 
     
-    rec_blocks(out, w-iw-wspace, ih+hspace, x+iw+wspace, y )
-    rec_blocks(out, w, h-ih-hspace, x, y+ih+hspace )
+    rec_blocks(out, w-iw-wspace, ih+hspace, x+iw+wspace, y, wspace, hspace, colors )
+    rec_blocks(out, w, h-ih-hspace, x, y+ih+hspace, wspace, hspace, colors )
 
 def slice_area(areas,area_index,w,h,x,y,mode,wspace=2,hspace=1):
     area = areas[area_index]
@@ -92,15 +92,59 @@ def rec_areas(out,areas,colors,wspace,hspace):
         copy_to_out(out,iw,ih,ix,iy,colors)
 
         slice_area(areas,ri,iw,ih,ix,iy,random.randint(0,1),wspace,hspace)
-    
+   
+def rec_halves(out, area, wspace, hspace, colors,add=-1):
+    ri = random.randint(1,4)
+    if add > -1:
+        add += 1
+        if add >= 5:
+            add = 1
+        ri = add
+    x,y,w,h = (0,0,0,0)
+    na = ( 0, 0, 0, 0 )
+    if ri == 1: #top open
+        x = area[2]
+        y = area[3] + area[1] // 2
+        w = area[0]
+        h = area[1] - (area[1] // 2)
+        na = ( area[0], area[1] // 2, area[2], area[3] )
+    elif ri == 3: #bottom open
+        x = area[2]
+        y = area[3]
+        w = area[0]
+        h = area[1] - (area[1] // 2)
+        na = ( area[0], area[1] // 2, area[2], area[3] + h )
+    elif ri == 2: #left open
+        x = area[2] + area[0] // 2
+        y = area[3]
+        w = area[0] - (area[0] // 2 )
+        h = area[1]
+        na = ( area[0] // 2, area[1], area[2], area[3] )
+    elif ri == 4: #right open
+        x = area[2]
+        y = area[3]
+        w = area[0] - (area[0] // 2)
+        h = area[1]
+        na = ( area[0] // 2, area[1], area[2] + w, area[3] )
 
-def main(colors,ws,hs):
+    copy_to_out(out,w,h,x,y,colors)
+    if na[0] <= wspace or na[1] <= hspace:
+            return
+    rec_halves(out,na,wspace,hspace,colors,add)
+
+
+
+def main(colors,ws,hs,mode):
     ts = (213,47)
     if sys.stdout.isatty():
         ts = os.get_terminal_size()
     out = [ [ " " for j in range(ts[0]) ] for i in range(ts[1]) ]
-    rec_areas(out, [ [ts[0]-2,ts[1]-2,1,1] ], colors, ws, hs )
-    #rec_blocks(out, ts.columns-1, ts.lines-1)
+    if mode == "area":
+        rec_areas(out, [ [ts[0]-2,ts[1]-2,1,1] ], colors, ws, hs )
+    if mode == "block":
+        rec_blocks(out, ts[0]-1, ts[1]-1, 1, 1, ws, hs, colors)
+    if mode == "half":
+        rec_halves(out, ( ts[0]-2, ts[1]-2, 1, 1 ), ws, hs, colors,random.randint(0,3))
     for s in out:
         print("".join(s))
 
@@ -108,6 +152,7 @@ def main_main():
     colors = False
     loops = 0
     infinite = True
+    mode = "half"
     ws = 1
     hs = 1
     for i in range(1,len(sys.argv)):
@@ -124,12 +169,22 @@ def main_main():
         if "-w" in a:
             ws = int(a.split("=")[1])
 
-        if "-h" in a:
+        if "-h" in a and not "half" in a:
             hs = int(a.split("=")[1])
+
+        if "--half" in a:
+            mode = "half"
+
+        if "--block" in a:
+            mode = "block"
+
+        if "--area" in a:
+            mode = "area"
+
 
                     
     while(infinite or loops > 0):
-        main(colors,ws,hs)
+        main(colors,ws,hs,mode)
         if not sys.stdout.isatty():
             break
         time.sleep(0.5)
